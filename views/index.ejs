@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎮 Guessing Game</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <script>
+    window.INITIAL_GAME_CODE = <%- JSON.stringify(typeof code === 'string' ? code : '') %>;
+  </script>
+  
+  <div id="game-container">
+    <!-- Header -->
+    <div id="header">
+      <h1>🎮 Guessing Game</h1>
+      <div id="state-message" class="state-banner"></div>
+    </div>
+
+    <!-- Login/Session Form -->
+    <form id="session-form" class="session-form">
+      <div class="form-group">
+        <input id="username-session-input" type="text" placeholder="Enter your name" required />
+      </div>
+      <div class="form-actions">
+        <button id="create-session-btn" type="button" class="btn btn-primary">Create Game</button>
+        <div class="divider">OR</div>
+      </div>
+      <div class="form-group">
+        <input id="join-code-input" type="text" placeholder="Enter game code" maxlength="6" />
+        <button id="join-session-btn" type="button" class="btn btn-secondary">Join Game</button>
+      </div>
+    </form>
+
+    <!-- Error Message -->
+    <div id="error-message" class="error-banner"></div>
+
+    <!-- Session Link (after creating game) -->
+    <div id="session-link" class="session-link-box"></div>
+
+    <!-- Main Game Area -->
+    <div id="game-main" class="game-main">
+      <div class="game-layout">
+        <!-- Left Sidebar: Players & Scoreboard -->
+        <aside class="sidebar">
+          <div id="players" class="players-box">
+            <h3>👥 Players</h3>
+            <div id="players-list"></div>
+          </div>
+          <div id="scoreboard" class="scoreboard-box">
+            <h3>🏆 Scores</h3>
+            <div id="scoreboard-list"></div>
+          </div>
+        </aside>
+
+        <!-- Main Content: Question & Chat -->
+        <main class="main-content">
+          <!-- Question Section -->
+          <section class="question-section">
+            <div id="question-progress" class="question-progress"></div>
+            <div id="question-box" class="question-box"></div>
+            <div id="timer-display" class="timer-display"></div>
+            
+            <!-- Game Master Controls -->
+            <div id="master-controls" class="master-controls" style="display:none;">
+              <div id="question-queue" class="question-queue"></div>
+              <form id="create-question-form" class="create-question-form">
+                <input id="question-input" type="text" placeholder="Enter question" required />
+                <input id="answer-input" type="text" placeholder="Enter answer" required />
+                <button type="submit" class="btn btn-primary">Add Question</button>
+              </form>
+              <button id="start-btn" type="button" class="btn btn-success btn-large">▶ Start Game</button>
+            </div>
+
+            <!-- Player Controls -->
+            <div id="player-controls" style="display:none;">
+              <form id="guess-form" class="guess-form">
+                <input id="guess-input" type="text" placeholder="Your guess..." required />
+                <button type="submit" class="btn btn-primary">Submit</button>
+              </form>
+              <button id="skip-btn" type="button" class="btn btn-secondary">Skip Question</button>
+            </div>
+
+            <!-- Result Messages -->
+            <div id="winner-message" class="winner-message"></div>
+          </section>
+
+          <!-- Chat Section -->
+          <section class="chat-section">
+            <h3>💬 Chat</h3>
+            <div id="chat" class="chat-box"></div>
+            <form id="chat-form" class="chat-form">
+              <input id="chat-input" type="text" placeholder="Type a message..." />
+              <button type="submit" class="btn btn-small">Send</button>
+            </form>
+          </section>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/client.js"></script>
+</body>
+</html>
