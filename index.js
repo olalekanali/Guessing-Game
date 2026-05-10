@@ -167,13 +167,15 @@ async function finishRound(session, winnerUser, reason = 'correct') {
 
   if (!hasNextQuestion) {
     session.endedAt = new Date();
+    session.questions = []; // Clear questions for next game master
+    session.currentQuestionIndex = -1;
     await session.save();
     await emitSessionRoster(sessionCode);
     broadcastToSession(sessionCode, 'game-ended', {
       winner: winnerUser ? winnerUser.username : null,
       answer: currentQuestion.answer,
     });
-    broadcastToSession(sessionCode, 'game-state', 'Waiting for players and questions...');
+    broadcastToSession(sessionCode, 'game-state', 'Game finished! New game master can add questions and restart.');
     await emitQuestionQueue(sessionCode);
     return;
   }
@@ -241,6 +243,10 @@ io.on('connection', (socket) => {
     const session = await GameSession.findOne({ code: normalizedCode }).populate('players');
     if (!session) {
       socket.emit('session-error', { message: 'Game not found. Check the code or link and try again.' });
+      return;
+    }
+    if (session.isActive) {
+      socket.emit('session-error', { message: 'Game is already in progress. You cannot join now.' });
       return;
     }
     if (session.players.find(p => p.username.toLowerCase() === username.toLowerCase())) {
@@ -368,15 +374,13 @@ io.on('connection', (socket) => {
     const code = socketSessionMap[socket.id];
     const session = await GameSession.findOne({ code }).populate('players');
     if (!session) return;
+    
     // Remove user from session
     session.players = session.players.filter(p => p.toString() !== user._id.toString());
     session.scores.delete(user.username);
     session.attempts.delete(user.username);
     session.skippedBy = session.skippedBy.filter((name) => name !== user.username);
-    await session.save();
-    await User.deleteOne({ _id: user._id });
-    delete socketUserMap[socket.id];
-    delete socketSessionMap[socket.id];
+    
     // If game master leaves, assign new master
     if (user.isGameMaster && session.players.length > 0) {
       const newMaster = await User.findById(session.players[0]);
@@ -384,19 +388,40 @@ io.on('connection', (socket) => {
         newMaster.isGameMaster = true;
         await newMaster.save();
         broadcastToSession(code, 'game-master');
+        broadcastToSession(code, 'game-state', `${newMaster.username} is now the game master!`);
+      }
+      // Stop game if master leaves while game is active
+      if (session.isActive) {
+        session.isActive = false;
+        session.currentQuestionIndex = -1;
+        clearSessionTimer(code);
+        broadcastToSession(code, 'game-ended', {
+          winner: null,
+          answer: null,
+        });
+        broadcastToSession(code, 'game-state', 'Game stopped. New game master can create questions.');
       }
     }
+    
+    await session.save();
+    await User.deleteOne({ _id: user._id });
+    delete socketUserMap[socket.id];
+    delete socketSessionMap[socket.id];
+    
     // If all players leave, delete session
     if (session.players.length === 0) {
       clearSessionTimer(code);
       await GameSession.deleteOne({ code });
     } else {
       await emitSessionRoster(code);
+      await emitQuestionQueue(code);
     }
+    
     console.log('User disconnected:', socket.id);
   });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Serv
+  console.log(`Server running on port ${PORT}`);
+});

@@ -1,15 +1,16 @@
 const socket = io();
 
+// UI Elements
 const chat = document.getElementById('chat');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const playersDiv = document.getElementById('players');
+const playersList = document.getElementById('players-list');
 const scoreboardDiv = document.getElementById('scoreboard');
+const scoreboardList = document.getElementById('scoreboard-list');
 const questionBox = document.getElementById('question-box');
 const guessForm = document.getElementById('guess-form');
 const guessInput = document.getElementById('guess-input');
-const joinForm = document.getElementById('join-form');
-const usernameInput = document.getElementById('username-input');
 const startBtn = document.getElementById('start-btn');
 const createQForm = document.getElementById('create-question-form');
 const questionInput = document.getElementById('question-input');
@@ -26,11 +27,16 @@ const errorMessage = document.getElementById('error-message');
 const questionProgress = document.getElementById('question-progress');
 const questionQueue = document.getElementById('question-queue');
 const skipBtn = document.getElementById('skip-btn');
+const timerDisplay = document.getElementById('timer-display');
+const masterControls = document.getElementById('master-controls');
+const playerControls = document.getElementById('player-controls');
+const gameMain = document.getElementById('game-main');
 
 let username = '';
 let isGameMaster = false;
 let gameActive = false;
 let currentCode = (window.INITIAL_GAME_CODE || '').trim().toLowerCase();
+let timerInterval = null;
 
 function showError(message) {
   errorMessage.innerText = message;
@@ -42,7 +48,33 @@ function clearError() {
 }
 
 function showGameMain() {
-  document.getElementById('game-main').style.display = 'block';
+  gameMain.style.display = 'block';
+}
+
+function hideGameMain() {
+  gameMain.style.display = 'none';
+}
+
+function startTimer(duration) {
+  let timeLeft = duration;
+  timerDisplay.classList.add('active');
+  timerDisplay.innerText = `⏱️ Time: ${timeLeft}s`;
+
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    timerDisplay.innerText = `⏱️ Time: ${timeLeft}s`;
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      timerDisplay.classList.remove('active');
+    }
+  }, 1000);
+}
+
+function stopTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerDisplay.classList.remove('active');
+  timerDisplay.innerText = '';
 }
 
 if (joinCodeInput && currentCode) {
@@ -77,9 +109,15 @@ socket.on('session-created', ({ code, link }) => {
   currentCode = code;
   sessionForm.style.display = 'none';
   sessionLinkDiv.style.display = 'block';
-  sessionLinkDiv.innerHTML = `Share this link on the same device/browser host: <b>${window.location.origin}${link}</b> <br>Game code: <b>${code}</b>`;
+  sessionLinkDiv.innerHTML = `
+    <div style="margin-bottom:12px;">
+      <strong>✅ Game Created!</strong><br>
+      Share this link: <code style="background:#f0f0f0;padding:4px 8px;border-radius:4px;">${window.location.origin}${link}</code><br>
+      Game code: <strong>${code}</strong>
+    </div>
+  `;
   showGameMain();
-  stateMessage.innerText = 'Waiting for players and questions...';
+  stateMessage.innerText = '⏳ Waiting for players and questions...';
   clearError();
 });
 
@@ -87,7 +125,7 @@ socket.on('session-joined', ({ code }) => {
   currentCode = code;
   sessionForm.style.display = 'none';
   showGameMain();
-  stateMessage.innerText = 'Joined game. Waiting for the game master to start.';
+  stateMessage.innerText = '⏳ Joined! Waiting for the game master to start...';
   clearError();
 });
 
@@ -160,16 +198,31 @@ socket.on('chat', ({ user, msg }) => {
 });
 
 socket.on('players', (players) => {
-  playersDiv.innerHTML = `<strong>Players (${players.length}):</strong> ` + players.map(p => p.username + (p.isGameMaster ? ' 👑' : '')).join(', ');
+  if (!playersList) return;
+  playersList.innerHTML = players.map(p => 
+    `<div class="player-item">
+      <span class="player-name">${p.username}</span>
+      ${p.isGameMaster ? '<span class="player-badge">👑 Master</span>' : ''}
+    </div>`
+  ).join('');
+  
+  // Update state message with player count
+  stateMessage.innerText = `${players.length} player${players.length !== 1 ? 's' : ''} in game`;
 });
 
 socket.on('scoreboard', (scores) => {
-  scoreboardDiv.innerHTML = '<strong>Scores:</strong> ' + scores.map(s => `${s.username}: ${s.score}`).join(', ');
+  if (!scoreboardList) return;
+  scoreboardList.innerHTML = scores.map(s => 
+    `<div class="score-item">
+      <span>${s.username}</span>
+      <span class="score-value">${s.score} pts</span>
+    </div>`
+  ).join('');
 });
 
 socket.on('question', ({ prompt, index, total }) => {
   questionProgress.innerHTML = total ? `Question ${index} of ${total}` : '';
-  questionBox.innerHTML = `<strong>Question:</strong> ${prompt}`;
+  questionBox.innerHTML = `<strong>❓ Question:</strong> ${prompt}`;
   if (!isGameMaster) {
     skipBtn.style.display = gameActive ? 'inline-block' : 'none';
   }
@@ -177,32 +230,35 @@ socket.on('question', ({ prompt, index, total }) => {
 
 socket.on('question-queue', ({ total, nextIndex, questions }) => {
   if (!isGameMaster) return;
-  questionQueue.style.display = 'block';
   if (!total) {
-    questionQueue.innerHTML = 'No questions added yet.';
+    questionQueue.innerHTML = '📋 No questions added yet.';
     return;
   }
-  const nextLabel = nextIndex > 0 ? `Next live question: ${nextIndex} of ${total}` : `Ready to start with ${total} question${total === 1 ? '' : 's'}.`;
-  questionQueue.innerHTML = `<strong>Question Queue:</strong> ${questions.join(' | ')}<br>${nextLabel}`;
+  const nextLabel = nextIndex > 0 ? `Next question: ${nextIndex} of ${total}` : `Ready with ${total} question${total === 1 ? '' : 's'}!`;
+  questionQueue.innerHTML = `<strong>📋 Question Queue:</strong><br>${questions.join('<br>')}<br><br><em>${nextLabel}</em>`;
 });
 
 socket.on('game-master', () => {
   isGameMaster = true;
-  createQForm.style.display = 'block';
-  startBtn.style.display = 'block';
+  masterControls.style.display = 'block';
+  playerControls.style.display = 'none';
   questionQueue.style.display = 'block';
   skipBtn.style.display = 'none';
+  stateMessage.innerText = '👑 You are the game master! Add questions and start the game.';
 });
 
-socket.on('game-started', () => {
-  guessForm.style.display = 'block';
-  createQForm.style.display = 'none';
+socket.on('game-started', ({ timerDuration }) => {
+  playerControls.style.display = 'block';
+  masterControls.style.display = 'none';
   startBtn.style.display = 'none';
   winnerMessage.innerText = '';
   gameActive = true;
-  stateMessage.innerText = 'Game in progress';
+  stateMessage.innerText = '🎮 Game in progress!';
   if (!isGameMaster) {
     skipBtn.style.display = 'inline-block';
+  }
+  if (timerDuration) {
+    startTimer(timerDuration);
   }
 });
 
@@ -210,30 +266,38 @@ socket.on('round-ended', ({ winner, answer, reason, hasNext }) => {
   guessForm.style.display = 'none';
   skipBtn.style.display = 'none';
   gameActive = false;
+  stopTimer();
+  
+  let message = '';
   if (winner) {
-    questionBox.innerHTML = `<strong>${winner}</strong> answered correctly. <br><strong>Answer:</strong> ${answer}`;
+    message = `✅ <strong>${winner}</strong> answered correctly!<br><strong>Answer:</strong> ${answer}`;
   } else if (reason === 'skipped') {
-    questionBox.innerHTML = `<strong>Question skipped by all players.</strong> <br><strong>Answer:</strong> ${answer}`;
+    message = `⏭️ <strong>Question skipped by all players.</strong><br><strong>Answer:</strong> ${answer}`;
   } else {
-    questionBox.innerHTML = `<strong>No correct answer.</strong> <br><strong>Answer:</strong> ${answer}`;
+    message = `❌ <strong>No correct answer.</strong><br><strong>Answer:</strong> ${answer}`;
   }
-  stateMessage.innerText = hasNext ? 'Loading next question...' : 'Game finished.';
+  
+  questionBox.innerHTML = message;
+  stateMessage.innerText = hasNext ? '⏳ Loading next question...' : '🏁 Game finished!';
 });
 
 socket.on('game-ended', ({ winner, answer }) => {
   guessForm.style.display = 'none';
   skipBtn.style.display = 'none';
   gameActive = false;
+  stopTimer();
+  
   if (winner) {
-    questionBox.innerHTML = `<strong>Winner:</strong> ${winner} <br><strong>Answer:</strong> ${answer}`;
+    questionBox.innerHTML = `🏆 <strong>Final Winner:</strong> ${winner}<br><strong>Answer was:</strong> ${answer}`;
   } else {
     questionBox.innerHTML = answer
-      ? `<strong>Game over.</strong> Final answer was: ${answer}`
-      : '<strong>Game over.</strong>';
+      ? `🎮 <strong>Game Over.</strong> Final answer was: ${answer}`
+      : '<strong>Game Over.</strong>';
   }
-  stateMessage.innerText = 'Waiting for players and questions...';
+  
+  stateMessage.innerText = '⏳ Waiting for next round...';
   if (isGameMaster) {
-    createQForm.style.display = 'block';
+    masterControls.style.display = 'block';
     startBtn.style.display = 'block';
   }
 });
