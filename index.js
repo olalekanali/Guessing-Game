@@ -119,8 +119,15 @@ async function sendCurrentQuestion(sessionCode) {
   if (!session || !session.isActive) return;
   const currentQuestion = getCurrentQuestion(session);
   if (!currentQuestion) return;
+  // Shuffle options if they exist
+  let shuffledOptions = [];
+  if (currentQuestion.options && currentQuestion.options.length > 0) {
+    shuffledOptions = [...currentQuestion.options].sort(() => Math.random() - 0.5);
+  }
+  
   broadcastToSession(sessionCode, 'question', {
     prompt: currentQuestion.prompt,
+    options: shuffledOptions,
     index: session.currentQuestionIndex + 1,
     total: session.questions.length,
   });
@@ -277,7 +284,7 @@ io.on('connection', (socket) => {
   });
 
   // Game master sets question/answer
-  socket.on('create-question', async ({ question, answer }) => {
+  socket.on('create-question', async ({ question, answer, options }) => {
     const userId = socketUserMap[socket.id];
     if (!userId) return;
     const user = await User.findById(userId);
@@ -285,9 +292,21 @@ io.on('connection', (socket) => {
     const session = await GameSession.findOne({ code });
     if (!user || !user.isGameMaster || !session || session.isActive) return;
     if (!question || !answer) return;
+    
+    // Validate options: must have at least 2 and answer must be in options
+    let validOptions = [];
+    if (options && options.length > 0) {
+      validOptions = options.map(opt => opt.trim()).filter(opt => opt);
+      const answerLower = answer.trim().toLowerCase();
+      if (!validOptions.some(opt => opt.toLowerCase() === answerLower)) {
+        validOptions.push(answer.trim());
+      }
+    }
+    
     session.questions.push({
       prompt: question.trim(),
       answer: answer.trim().toLowerCase(),
+      options: validOptions,
     });
     await session.save();
     await emitQuestionQueue(code);
@@ -355,13 +374,28 @@ io.on('connection', (socket) => {
     const code = socketSessionMap[socket.id];
     const session = await GameSession.findOne({ code }).populate('players');
     if (!user || !session || !session.isActive || user.isGameMaster) return;
+    
+    const eligiblePlayers = getEligiblePlayers(session);
+    if (eligiblePlayers.length === 0) return;
+    
+    // Add player to skipped list if not already there
     if (!session.skippedBy.includes(user.username)) {
       session.skippedBy.push(user.username);
-      await session.save();
     }
-    const eligiblePlayers = getEligiblePlayers(session);
-    const allSkipped = eligiblePlayers.length > 0 && eligiblePlayers.every((player) => session.skippedBy.includes(player.username));
-    if (allSkipped) {
+    
+    // Check if all eligible players have either skipped OR have no attempts left
+    const allDone = eligiblePlayers.every((player) => {
+      const hasSkipped = session.skippedBy.includes(player.username);
+      const hasAttempts = (session.attempts.get(player.username) || 0) > 0;
+      return hasSkipped || !hasAttempts;
+    });
+    
+    await session.save();
+    
+    // Broadcast who skipped
+    broadcastToSession(code, 'chat', { user: 'System', msg: `${user.username} skipped the question` });
+    
+    if (allDone) {
       await finishRound(session, null, 'skipped');
     }
   });

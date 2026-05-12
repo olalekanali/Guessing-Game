@@ -15,6 +15,7 @@ const startBtn = document.getElementById('start-btn');
 const createQForm = document.getElementById('create-question-form');
 const questionInput = document.getElementById('question-input');
 const answerInput = document.getElementById('answer-input');
+const optionsInput = document.getElementById('options-input');
 const sessionForm = document.getElementById('session-form');
 const usernameSessionInput = document.getElementById('username-session-input');
 const createSessionBtn = document.getElementById('create-session-btn');
@@ -37,6 +38,11 @@ let isGameMaster = false;
 let gameActive = false;
 let currentCode = (window.INITIAL_GAME_CODE || '').trim().toLowerCase();
 let timerInterval = null;
+
+function submitGuess(guess) {
+  if (!gameActive) return;
+  socket.emit('guess', guess);
+}
 
 function showError(message) {
   errorMessage.innerText = message;
@@ -164,11 +170,19 @@ if (createQForm) {
     e.preventDefault();
     const question = questionInput.value.trim();
     const answer = answerInput.value.trim();
+    const optionsText = optionsInput.value.trim();
+    
     if (question && answer) {
+      // Parse options from textarea (one per line)
+      const options = optionsText
+        ? optionsText.split('\n').map(opt => opt.trim()).filter(opt => opt && opt !== answer.trim())
+        : [];
+      
       clearError();
-      socket.emit('create-question', { question, answer });
+      socket.emit('create-question', { question, answer, options });
       questionInput.value = '';
       answerInput.value = '';
+      optionsInput.value = '';
     } else {
       showError('Enter both a question and answer.');
     }
@@ -220,9 +234,20 @@ socket.on('scoreboard', (scores) => {
   ).join('');
 });
 
-socket.on('question', ({ prompt, index, total }) => {
+socket.on('question', ({ prompt, options, index, total }) => {
   questionProgress.innerHTML = total ? `Question ${index} of ${total}` : '';
-  questionBox.innerHTML = `<strong>❓ Question:</strong> ${prompt}`;
+  let html = `<strong>❓ Question:</strong> ${prompt}`;
+  
+  // Display multiple choice options if available
+  if (options && options.length > 0) {
+    html += '<div class="options-display">';
+    options.forEach(option => {
+      html += `<button type="button" class="option-btn" onclick="submitGuess('${option.replace(/'/g, "\\'")}')">${option}</button>`;
+    });
+    html += '</div>';
+  }
+  
+  questionBox.innerHTML = html;
   if (!isGameMaster) {
     skipBtn.style.display = gameActive ? 'inline-block' : 'none';
   }

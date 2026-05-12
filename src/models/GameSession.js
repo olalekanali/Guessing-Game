@@ -4,6 +4,7 @@ const questionSchema = new mongoose.Schema(
   {
     prompt: { type: String, required: true },
     answer: { type: String, required: true },
+    options: { type: [String], default: [] },
   },
   { _id: false }
 );

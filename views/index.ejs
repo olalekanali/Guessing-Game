@@ -67,7 +67,11 @@
               <div id="question-queue" class="question-queue"></div>
               <form id="create-question-form" class="create-question-form">
                 <input id="question-input" type="text" placeholder="Enter question" required />
-                <input id="answer-input" type="text" placeholder="Enter answer" required />
+                <input id="answer-input" type="text" placeholder="Enter correct answer" required />
+                <div id="options-container" class="options-container">
+                  <label>Multiple Choice Options (optional - one per line):</label>
+                  <textarea id="options-input" placeholder="Option 1&#10;Option 2&#10;Option 3&#10;..." rows="4"></textarea>
+                </div>
                 <button type="submit" class="btn btn-primary">Add Question</button>
               </form>
               <button id="start-btn" type="button" class="btn btn-success btn-large">▶ Start Game</button>
